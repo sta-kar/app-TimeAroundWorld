@@ -1,4 +1,4 @@
-import { City, getOffsetHours, supportedSystemTimezone } from '../Data/DataSource'
+import { City, getCityKey, getOffsetHours, supportedSystemTimezone } from '../Data/DataSource'
 
 @Component
 export struct ListPage {
@@ -7,10 +7,27 @@ export struct ListPage {
   @State private visibleCities: City[] = supportedSystemTimezone
   @State private query: string = ''
   @State private selectedIndex: number = 0
+  @State private currentTime: number = Date.now()
   private scroller: Scroller = new Scroller()
+  private intervalId: number = 0
   private alphabets: string[] =
     ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W',
       'X', 'Y', 'Z']
+
+  aboutToAppear(): void {
+    if (this.intervalId === 0) {
+      this.intervalId = setInterval(() => {
+        this.currentTime = Date.now()
+      }, 60000)
+    }
+  }
+
+  aboutToDisappear(): void {
+    if (this.intervalId !== 0) {
+      clearInterval(this.intervalId)
+      this.intervalId = 0
+    }
+  }
 
   private search(value: string): void {
     this.query = value
@@ -20,7 +37,7 @@ export struct ListPage {
   }
 
   private isSelected(city: City): boolean {
-    return this.cityList.some((selected: City) => selected.name === city.name)
+    return this.cityList.some((selected: City) => getCityKey(selected) === getCityKey(city))
   }
 
   private select(city: City): void {
@@ -81,7 +98,7 @@ export struct ListPage {
                         Text(item.name)
                           .fontSize(18).fontWeight(FontWeight.Medium).fontColor('#0F0026')
                           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-                        Text(`UTC${getOffsetHours(item.timezone, Date.now()) >= 0 ? '+' : ''}${getOffsetHours(item.timezone, Date.now())}`)
+                        Text(this.formatOffset(getOffsetHours(item.timezone, this.currentTime)))
                           .fontSize(13).fontColor('#675A79')
                       }
                       .alignItems(HorizontalAlign.Start).layoutWeight(1)
@@ -97,7 +114,7 @@ export struct ListPage {
                 }
                 .margin({ bottom: 8 })
                 .onClick(() => this.select(item))
-              }, (item: City) => item.name)
+              }, (item: City) => getCityKey(item))
             }
             .width('100%').height('100%')
             .padding({ right: this.query.trim().length === 0 ? 30 : 0 })
@@ -126,5 +143,9 @@ export struct ListPage {
     .onReady((context: NavDestinationContext) => {
       this.pathStack = context.pathStack
     })
+  }
+
+  private formatOffset(offsetHours: number): string {
+    return `UTC${offsetHours >= 0 ? '+' : ''}${offsetHours}`
   }
 }

@@ -27,11 +27,13 @@ jobs:
           oniro-app sdk install 6.1
           oniro-app cmdtools install
 
-      - name: Build and sign app
+      - name: Test, build, and sign app
         run: |
           cd "$GITHUB_WORKSPACE"
           cp build-profile.example.json5 build-profile.json5
           oniro-app sign
+          oniro-app build --task test
+          grep -q 'Failure: 0, Error: 0' entry/.test/default/intermediates/test/coverage_data/test_result.txt
           oniro-app build
 
       - name: Upload built HAP packages

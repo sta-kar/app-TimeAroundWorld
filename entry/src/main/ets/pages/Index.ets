@@ -1,11 +1,17 @@
 import { timestampToDate } from '../Utils/timeUtils'
-import { City, getOffsetHours, supportedSystemTimezone } from '../Data/DataSource'
+import { City, getCityKey, getOffsetHours, supportedSystemTimezone } from '../Data/DataSource'
 import { ListPage } from './ListPage'
 import { systemDateTime } from '@kit.BasicServicesKit'
 import { i18n } from '@kit.LocalizationKit'
 import { restoreCities } from '../Data/CityListLogic'
 
 PersistentStorage.persistProp<City[]>('cityList', [])
+
+interface CityClock {
+  city: City;
+  offsetHours: number;
+  differenceHours: number;
+}
 
 @Entry
 @Component
@@ -17,14 +23,13 @@ struct Index {
 
   @State isEdit: boolean = false
   @StorageLink('cityList') cityList: City[] = []
+  @State cityClocks: CityClock[] = []
   pathStack: NavPathStack = new NavPathStack()
   private intervalId: number = 0
   private scroller: Scroller = new Scroller()
   @Builder
   PagesMap(name: string) {
-    if (name === 'Index') {
-      Index()
-    } else if (name === 'ListPage') {
+    if (name === 'ListPage') {
       ListPage()
     }
   }
@@ -34,7 +39,7 @@ struct Index {
     this.cityList = restoreCities(this.cityList, supportedSystemTimezone)
     this.updateTime()
     if (this.intervalId === 0) {
-      this.intervalId = setInterval(() => this.updateTime(), 1000)
+      this.intervalId = setInterval(() => this.updateTime(), 60000)
     }
   }
 
@@ -53,13 +58,32 @@ struct Index {
       this.convertedDate = timestampToDate(now)
       this.timeZone = zone
       this.currentTimeZoneOffset = getOffsetHours(zone, now)
+      this.updateCityClocks(now, this.currentTimeZoneOffset)
     } catch (error) {
       console.error(`Could not update the clock: ${error}`)
     }
   }
 
-  private removeCity(name: string): void {
-    this.cityList = this.cityList.filter((city: City) => city.name !== name)
+  private updateCityClocks(timestamp: number, localOffset: number): void {
+    const clocks: CityClock[] = []
+    for (const city of this.cityList) {
+      try {
+        const offset = getOffsetHours(city.timezone, timestamp)
+        clocks.push({ city: city, offsetHours: offset, differenceHours: offset - localOffset })
+      } catch (error) {
+        console.error(`Could not calculate the time for ${city.name}: ${error}`)
+      }
+    }
+    this.cityClocks = clocks
+  }
+
+  private refreshCityClocks(): void {
+    this.updateCityClocks(this.currentTime, this.currentTimeZoneOffset)
+  }
+
+  private removeCity(id: string): void {
+    this.cityList = this.cityList.filter((city: City) => getCityKey(city) !== id)
+    this.refreshCityClocks()
     if (this.cityList.length === 0) {
       this.isEdit = false
     }
@@ -74,21 +98,22 @@ struct Index {
     const moved: City[] = reordered.splice(from, 1)
     reordered.splice(to, 0, moved[0])
     this.cityList = reordered
+    this.refreshCityClocks()
   }
 
   private addCity(): void {
     this.pathStack.pushPathByName('ListPage', {}, (popInfo: PopInfo) => {
       const selected = popInfo.result as City | undefined
-      if (selected && typeof selected.timezone === 'string' &&
-        supportedSystemTimezone.some((city: City) => city.timezone === selected.timezone) &&
-        !this.cityList.some((city: City) => city.name === selected.name)) {
-        this.cityList = [...this.cityList, selected]
+      const city = selected ? supportedSystemTimezone.find((item: City) => item.id === selected.id) : undefined
+      if (city && !this.cityList.some((item: City) => getCityKey(item) === getCityKey(city))) {
+        this.cityList = [...this.cityList, city]
+        this.refreshCityClocks()
       }
     })
   }
 
   @Builder
-  CityRow(item: City) {
+  CityRow(item: CityClock) {
     Row({ space: 12 }) {
       if (this.isEdit) {
         Button() {
@@ -97,28 +122,34 @@ struct Index {
         }
         .width(38).height(38)
         .backgroundColor('#FF27B7')
-        .onClick(() => this.removeCity(item.name))
+        .onClick(() => this.removeCity(getCityKey(item.city)))
       }
       Column({ space: 5 }) {
-        Text(item.name)
+        Text(item.city.name)
           .fontSize(19).fontWeight(FontWeight.Bold).fontColor('#0F0026')
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
-        if (getOffsetHours(item.timezone, this.currentTime) > this.currentTimeZoneOffset) {
-          Text($r(getOffsetHours(item.timezone, this.currentTime) - this.currentTimeZoneOffset === 1 ?
-            'app.string.hour_ahead' : 'app.string.hours_ahead',
-            `${getOffsetHours(item.timezone, this.currentTime) - this.currentTimeZoneOffset}`))
-            .fontSize(13).fontColor('#675A79')
-        } else if (getOffsetHours(item.timezone, this.currentTime) < this.currentTimeZoneOffset) {
-          Text($r(this.currentTimeZoneOffset - getOffsetHours(item.timezone, this.currentTime) === 1 ?
-            'app.string.hour_behind' : 'app.string.hours_behind',
-            `${this.currentTimeZoneOffset - getOffsetHours(item.timezone, this.currentTime)}`))
-            .fontSize(13).fontColor('#675A79')
+        if (item.differenceHours > 0) {
+          if (item.differenceHours === 1) {
+            Text($r('app.string.hour_ahead', `${item.differenceHours}`))
+              .fontSize(13).fontColor('#675A79')
+          } else {
+            Text($r('app.string.hours_ahead', `${item.differenceHours}`))
+              .fontSize(13).fontColor('#675A79')
+          }
+        } else if (item.differenceHours < 0) {
+          if (item.differenceHours === -1) {
+            Text($r('app.string.hour_behind', `${-item.differenceHours}`))
+              .fontSize(13).fontColor('#675A79')
+          } else {
+            Text($r('app.string.hours_behind', `${-item.differenceHours}`))
+              .fontSize(13).fontColor('#675A79')
+          }
         } else {
           Text($r('app.string.same_time')).fontSize(13).fontColor('#675A79')
         }
       }
       .alignItems(HorizontalAlign.Start).layoutWeight(1)
-      TextClock({ timeZoneOffset: -getOffsetHours(item.timezone, this.currentTime) })
+      TextClock({ timeZoneOffset: -item.offsetHours })
         .fontSize(22).fontWeight(FontWeight.Bold).fontColor('#0F0026')
     }
     .width('100%').height(78).padding({ left: 16, right: 16 })
@@ -176,12 +207,12 @@ struct Index {
           .layoutWeight(1).width('100%')
         } else {
           List({ scroller: this.scroller }) {
-            ForEach(this.cityList, (item: City) => {
+            ForEach(this.cityClocks, (item: CityClock) => {
               ListItem() {
                 this.CityRow(item)
               }
               .margin({ bottom: 10 })
-            }, (item: City) => item.name)
+            }, (item: CityClock) => getCityKey(item.city))
               .onMove((from: number, to: number) => this.moveCity(from, to))
           }
           .layoutWeight(1).width('100%')

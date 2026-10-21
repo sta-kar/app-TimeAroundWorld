@@ -47,7 +47,7 @@ In PowerShell, use `Copy-Item build-profile.example.json5 build-profile.json5` i
 
 ## Explore the implementation
 
-[EntryAbility](entry/src/main/ets/entryability/EntryAbility.ets) loads the [main screen](entry/src/main/ets/pages/Index.ets). The main screen obtains the current time and device time-zone ID, calculates current offsets for the selected cities, and opens the [city picker](entry/src/main/ets/pages/ListPage.ets) through `Navigation`. The [catalog](entry/src/main/ets/Data/DataSource.ets) stores city names and IANA time-zone IDs. [Saved-list restoration](entry/src/main/ets/Data/CityListLogic.ets) upgrades older saved entries while retaining their order.
+[EntryAbility](entry/src/main/ets/entryability/EntryAbility.ets) loads the [main screen](entry/src/main/ets/pages/Index.ets). The main screen obtains the current time and device time-zone ID, calculates current offsets for the selected cities, and opens the [city picker](entry/src/main/ets/pages/ListPage.ets) through `Navigation`. The [catalog](entry/src/main/ets/Data/DataSource.ets) stores 573 city records and IANA time-zone IDs. [Saved-list restoration](entry/src/main/ets/Data/CityListLogic.ets) upgrades older saved entries while retaining their order.
 
 ## Verify
 
@@ -56,6 +56,8 @@ After installing the signed HAP on a device or emulator, compare the local clock
 ## Limitations
 
 The picker uses the cities listed in the bundled catalog; it does not download new cities or time data. Search matches city names only. The displayed times use the device clock and its installed time-zone data.
+
+The static city catalog is derived from the GeoNames `cities1000` dump downloaded on 2026-10-21 and filtered to records with a population of at least 1,000,000. GeoNames data is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); see [GeoNames](https://www.geonames.org/) for the source.
 
 ## Contributing
 
